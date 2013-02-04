@@ -2,7 +2,7 @@
 IDENTIFIER=com.bebekoubou.timer
 
 pmdate_from_w_hhmm() {
-  w=$1
+  w=`expr $1 % 7`
   hhmm=`echo $2|sed s/://`
   hh=`printf %04s $hhmm|cut -c 1-2`
   mm=`printf %04s $hhmm|cut -c 3-4`
