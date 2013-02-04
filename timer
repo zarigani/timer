@@ -33,8 +33,8 @@ plist_Label() {
 }
 
 plist_StartCalendarInterval_week() {
-  hh=`printf %04s $2|cut -c 1-2`
-  mm=`printf %04s $2|cut -c 3-4`
+  hh=`echo $2|sed s/://|xargs printf %04s|cut -c 1-2`
+  mm=`echo $2|sed s/://|xargs printf %04s|cut -c 3-4`
   for w in `weekdays $1`
   do
     echo "<dict><key>Hour</key><integer>$hh</integer><key>Minute</key><integer>$mm</integer><key>Weekday</key><integer>$w</integer></dict> "
@@ -44,8 +44,8 @@ plist_StartCalendarInterval_week() {
 plist_StartCalendarInterval_date() {
   m=`echo $1|cut -d/ -f1`
   d=`echo $1|cut -d/ -f2`
-  hh=`printf %04s $2|cut -c 1-2`
-  mm=`printf %04s $2|cut -c 3-4`
+  hh=`echo $2|sed s/://|xargs printf %04s|cut -c 1-2`
+  mm=`echo $2|sed s/://|xargs printf %04s|cut -c 3-4`
   echo "<dict><key>Month</key><integer>$m</integer><key>Day</key><integer>$d</integer><key>Hour</key><integer>$hh</integer><key>Minute</key><integer>$mm</integer></dict> "
 }
 

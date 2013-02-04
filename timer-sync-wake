@@ -15,9 +15,8 @@ pmdate_from_w_hhmm() {
 pmdate_from_md_hhmm() {
   m=`echo $1|cut -d/ -f1`
   d=`echo $1|cut -d/ -f2`
-  hhmm=`echo $2|sed s/://`
-  hh=`printf %04s $hhmm|cut -c 1-2`
-  mm=`printf %04s $hhmm|cut -c 3-4`
+  hh=`echo $2|sed s/://|xargs printf %04s|cut -c 1-2`
+  mm=`echo $2|sed s/://|xargs printf %04s|cut -c 3-4`
   current_date=`date +%s`
   preset_date=`date -v${m}m -v${d}d -v${hh}H -v${mm}M -v0S +%s`
   n=`expr $current_date / $preset_date`
