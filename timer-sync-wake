@@ -1,0 +1,73 @@
+#!/bin/sh
+IDENTIFIER=com.bebekoubou.timer
+
+pmdate_from_w_hhmm() {
+  w=$1
+  hhmm=`echo $2|sed s/://`
+  hh=`printf %04s $hhmm|cut -c 1-2`
+  mm=`printf %04s $hhmm|cut -c 3-4`
+  current_date=`date +%s`
+  preset_date=`date -v${w}w -v${hh}H -v${mm}M -v0S +%s`
+  n=`expr $current_date / $preset_date`
+  date -v${w}w -v+${n}w -v${hh}H -v${mm}M -v0S -v-30S "+%m/%d/%y %H:%M:%S"
+}
+
+pmdate_from_md_hhmm() {
+  m=`echo $1|cut -d/ -f1`
+  d=`echo $1|cut -d/ -f2`
+  hhmm=`echo $2|sed s/://`
+  hh=`printf %04s $hhmm|cut -c 1-2`
+  mm=`printf %04s $hhmm|cut -c 3-4`
+  current_date=`date +%s`
+  preset_date=`date -v${m}m -v${d}d -v${hh}H -v${mm}M -v0S +%s`
+  n=`expr $current_date / $preset_date`
+  date -v+${n}y -v${m}m -v${d}d -v${hh}H -v${mm}M -v0S -v-30S "+%m/%d/%y %H:%M:%S"
+}
+
+add_schedule() {
+  pmset -g sched|grep -q "wake at $1" || ./timer-add-schedule "$1"
+}
+
+rm_schedule() {
+  pmset -g sched|grep -q "wake at $1" && ./timer-rm-schedule "$1"
+}
+
+weekdays() {
+  echo $1|grep / || bash -c "echo `echo $1|sed 's/\(.-.\)/{\1}/g'|sed 's/-/../g'|tr ',' ' '`"|tr ' ' '\n'|sort -u
+}
+
+
+
+
+echo ======== sync-wake
+cd `dirname $0`
+
+_IFS="$IFS"; IFS=$'\n';
+
+# launchd.plistを見て、不足するscheduleを追加する
+launchd_plist_paths="`ls $HOME/Library/LaunchAgents/$IDENTIFIER* 2>/dev/null`"
+for f in $launchd_plist_paths
+do
+  args=`defaults read "${f%.plist}" Label`
+  word=`echo $args|cut -d' ' -f2`
+  hhmm=`echo $args|cut -d' ' -f3`
+  for wd in `weekdays $word`
+  do
+    if `echo $wd|grep -q /`; then
+      pmdate=`pmdate_from_md_hhmm $wd $hhmm`
+    else
+      pmdate=`pmdate_from_w_hhmm $wd $hhmm`
+    fi
+    add_schedule "$pmdate"
+    launchd_pmdate_list+="${pmdate}\n"
+  done
+done
+
+# launchd.plistに存在しない、余分なscheduleを削除する
+schedule_wake_list=`pmset -g sched|grep '^\W\['|grep 'wake at'|cut -d' ' -f6-7`
+for s in $schedule_wake_list
+do
+  echo $launchd_pmdate_list|grep -q "$s" || rm_schedule "$s"
+done
+
+IFS="$_IFS"

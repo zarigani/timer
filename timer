@@ -1,0 +1,199 @@
+#!/bin/bash
+IDENTIFIER=com.bebekoubou.timer
+
+weekdays() {
+  bash_format=`echo $1|sed 's/\(.-.\)/{\1}/g'|sed 's/-/../g'|tr ',' ' '`
+  bash -c "echo $bash_format"|tr ' ' '\n'|sort -u
+}
+
+formed_args() {
+  m=`echo $1|grep /|cut -d/ -f1|xargs printf %02s`
+  d=`echo $1|grep /|cut -d/ -f2|xargs printf %02s`
+  w=`echo $1|grep -v /`
+  hhmm=`echo $2|sed s/://|xargs printf %04s`
+  cmd=`echo $@|cut -d' ' -f3-`
+  echo -n ${w:-$m/$d} $hhmm $cmd
+}
+
+week_or_date() {
+  echo $1|grep -q / || echo week
+  echo $1|grep -q / && echo date
+}
+
+plist_fname() {
+  echo -n $IDENTIFIER-`week_or_date $1` `formed_args $@|sed 's/\//_/g'`
+}
+
+launchd_path() {
+  echo -n $HOME/Library/LaunchAgents/`plist_fname $@`.plist
+}
+
+plist_Label() {
+  echo -n $IDENTIFIER-`week_or_date $1` `formed_args $@`
+}
+
+plist_StartCalendarInterval_week() {
+  hh=`printf %04s $2|cut -c 1-2`
+  mm=`printf %04s $2|cut -c 3-4`
+  for w in `weekdays $1`
+  do
+    echo "<dict><key>Hour</key><integer>$hh</integer><key>Minute</key><integer>$mm</integer><key>Weekday</key><integer>$w</integer></dict> "
+  done
+}
+
+plist_StartCalendarInterval_date() {
+  m=`echo $1|cut -d/ -f1`
+  d=`echo $1|cut -d/ -f2`
+  hh=`printf %04s $2|cut -c 1-2`
+  mm=`printf %04s $2|cut -c 3-4`
+  echo "<dict><key>Month</key><integer>$m</integer><key>Day</key><integer>$d</integer><key>Hour</key><integer>$hh</integer><key>Minute</key><integer>$mm</integer></dict> "
+}
+
+plist_StartCalendarInterval() {
+  echo $1|grep -q / || plist_StartCalendarInterval_week $@
+  echo $1|grep -q / && plist_StartCalendarInterval_date $@
+}
+
+plist_ProgramArguments_week() {
+  shift 2
+  echo "$@; /usr/local/bin/timer-sync-wake;"
+}
+
+plist_ProgramArguments_date() {
+  launchd_plist=`launchd_path $@`
+  launchd_label=`plist_Label $@`
+  shift 2
+  echo "$@; rm -f '$launchd_plist'; /usr/local/bin/timer-sync-wake; launchctl remove '$launchd_label'"
+}
+
+plist_ProgramArguments() {
+  echo $1|grep -q / || plist_ProgramArguments_week $@
+  echo $1|grep -q / && plist_ProgramArguments_date $@
+}
+
+list_launchd() {
+  echo ======== launchd list >&2
+  launchd_plist_paths=`ls $HOME/Library/LaunchAgents/$IDENTIFIER* 2>/dev/null`
+  status=$?
+  local IFS=$'\n'
+  for f in $launchd_plist_paths
+  do
+    echo -e `defaults read "${f%.plist}" Label|cut -d' ' -f2-|sed 's/ / \\\t/'`
+  done
+  return $status
+}
+
+list_schedule() {
+  echo ======== schedule list
+  pmset -g sched
+}
+
+add_launchd() {
+  echo ======== edit
+  launchd_plist=`launchd_path $@`
+  defaults write "${launchd_plist%.plist}" Label "`plist_Label $@`"
+  defaults write "${launchd_plist%.plist}" ProgramArguments -array /usr/bin/caffeinate /bin/sh -c "`plist_ProgramArguments $@`"
+  defaults write "${launchd_plist%.plist}" StartCalendarInterval -array `plist_StartCalendarInterval $@`
+  launchctl load "$launchd_plist"
+  echo -e `echo $@|sed 's/ / \\\t/'`
+}
+
+rm_launchd() {
+  echo ======== delete
+  launchd_plist=`launchd_path $@`
+  launchctl unload "$launchd_plist"
+  rm -f "$launchd_plist"
+  echo -e `echo $@|sed 's/ / \\\t/'`
+}
+
+show_usage() {
+  echo "Usage: $COMMAND [-li]"
+  echo "       $COMMAND [-de] mm/dd HHMM command; ..."
+  echo "       $COMMAND [-de] weeknum HHMM command; ..."
+  echo "           mm/dd  : 02/01=2/1"
+  echo "           weeknum: 0=日 1=月 2=火 3=水 4=木 5=金 6=土 7=日"
+  echo "                      1-5 = 月から金まで"
+  echo "                      5-7 = 金土日"
+  echo "                    1,3,5 = 月水金"
+  echo "           HHMM   : 0600=6:00"
+  echo "Example:"
+  echo "       $COMMAND -e 02/01 1700 /usr/local/bin/rec_radiko.sh -o radikoru/ -t 3600 FMJ"
+  echo "       $COMMAND -d 02/01 1700 /usr/local/bin/rec_radiko.sh -o radikoru/ -t 3600 FMJ"
+  echo "       $COMMAND -e 0 1700 /usr/local/bin/rec_radiko.sh -o radikoru/ -t 3600 FMJ"
+  echo "       $COMMAND -e 1-5 0600 /usr/local/bin/rec_radiru.sh -o radikoru/ -t 1800 NHK-FM"
+}
+
+command_v() {
+  osascript -e 'delay .5' -e 'tell application "System Events"' -e 'keystroke "v" using command down' -e 'end tell'
+}
+
+
+
+
+cd `dirname $0`
+COMMAND=`basename $0`
+
+# 引数解析
+while getopts deli OPTION
+do
+  case $OPTION in
+    d ) OPTION_d="TRUE" ; VALUE_d="$OPTARG" ;;
+    e ) OPTION_e="TRUE" ; VALUE_e="$OPTARG" ;;
+    l ) OPTION_l="TRUE" ;;
+    i ) OPTION_i="TRUE" ;;
+    * ) show_usage ; exit 1 ;;
+  esac
+done
+
+shift $(($OPTIND - 1)) #残りの非オプションな引数のみが、$@に設定される
+
+if [ $# = 0 -a "$OPTION_l" != "TRUE" -a "$OPTION_i" != "TRUE" ]; then
+  show_usage ; exit 1
+fi
+
+if [ $OPTIND = 1 ]; then
+  echo Needs option!! ; show_usage ; exit 1
+fi
+
+# オプション処理
+if [ "$OPTION_d" = "TRUE" ]; then
+  rm_launchd $@
+  ./timer-sync-wake
+  list_launchd
+  list_schedule
+fi
+
+if [ "$OPTION_e" = "TRUE" ]; then
+  add_launchd $@
+  ./timer-sync-wake
+  list_launchd
+  list_schedule
+fi
+
+if [ "$OPTION_l" = "TRUE" ]; then
+  list_launchd
+  list_schedule
+fi
+
+if [ "$OPTION_i" = "TRUE" ]; then
+  list_launchd &>/dev/null || exit 1
+  list_launchd 2>/dev/null|nl -s':  '
+  
+  read -p 'Select Number :' NUM
+  echo -n $NUM|grep -q '[0123456789]\{1,\}' || exit 1
+  [ $NUM -gt `list_launchd 2>/dev/null|wc -l` ] && exit 1
+  the_command=`list_launchd 2>/dev/null|head -$NUM|tail -1|tr -d '\t'`
+  
+  read -p '[c]opy  [d]elete :' ACTION
+  case $ACTION in
+    c) echo -en "$0 -e $the_command"|pbcopy
+       command_v & ;;
+       
+    d) rm_launchd $the_command
+       ./timer-sync-wake
+       list_launchd
+       list_schedule ;;
+       
+    *) exit 1;;
+  esac  
+fi
