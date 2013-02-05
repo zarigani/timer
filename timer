@@ -153,7 +153,11 @@ if [ $# = 0 -a "$OPTION_l" != "TRUE" -a "$OPTION_i" != "TRUE" ]; then
 fi
 
 if [ $OPTIND = 1 ]; then
-  echo Needs option!! ; show_usage ; exit 1
+  echo 'Needs option -d or -e!!' ; exit 1
+fi
+
+if [ "$OPTION_d" = "TRUE" -o "$OPTION_e" = "TRUE" ] && `echo $3|grep -q -v '^/.*'`; then
+   echo "'$3' needs absolute path!!" ; exit 1
 fi
 
 # オプション処理
