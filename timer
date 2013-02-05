@@ -2,7 +2,8 @@
 IDENTIFIER=com.bebekoubou.timer
 
 weekdays() {
-  bash_format=`echo $1|sed 's/\(.-.\)/{\1}/g'|sed 's/-/../g'|tr ',' ' '`
+  safe_chars=`echo $1|sed 's/[^0-9,-\/]//g'`
+  bash_format=`echo $safe_chars|sed 's/\(.-.\)/{\1}/g'|sed 's/-/../g'|tr ',' ' '`
   bash -c "echo $bash_format"|tr ' ' '\n'|sort -u
 }
 
