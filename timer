@@ -79,7 +79,7 @@ list_launchd() {
   local IFS=$'\n'
   for f in $launchd_plist_paths
   do
-    echo -e `defaults read "${f%.plist}" Label|cut -d' ' -f2-|sed 's/ / \\\t/'`
+    echo -e `defaults read "${f%.plist}" Label|cut -d' ' -f2-|sed 's/ /\\\t/'`|expand
   done
   return $status
 }
@@ -183,14 +183,14 @@ if [ "$OPTION_i" = "TRUE" ]; then
   read -p 'Select Number :' NUM
   echo -n $NUM|grep -q '[0-9]\{1,\}' || exit 1
   [ $NUM -gt `list_launchd 2>/dev/null|wc -l` ] && exit 1
-  the_command=`list_launchd 2>/dev/null|head -$NUM|tail -1|tr -d '\t'`
+  command_args=`list_launchd 2>/dev/null|head -$NUM|tail -1|sed 's/ \{2,\}/ /'`
   
   read -p '[c]opy  [d]elete :' ACTION
   case $ACTION in
-    c) echo -en "$0 -e $the_command"|pbcopy
+    c) echo -en "$0 -e $command_args"|pbcopy
        command_v & ;;
        
-    d) rm_launchd $the_command
+    d) rm_launchd $command_args
        ./timer-sync-wake
        list_launchd
        list_schedule ;;
